@@ -2,6 +2,7 @@ import asyncio
 import contextlib
 import os
 
+import async_timeout
 from aiopubsub import Pubsub
 from sanic import Sanic
 import logging
@@ -48,15 +49,18 @@ class SseApp(object):
     def is_registered(self, event, client_id, group=None):
         return self._register.is_registered(event, client_id, group)
 
-    async def terminate(self, event, client_id):
+    async def terminate(self, event, client_id=None, _pub=None):
         message = MessageFactory.load(MessageFactory.CATEGORY_CONTROL, ControlEvent(ControlEvent.EVENT_TERMINATION))
         async with self._pubsub.get_pub() as _pub:
             return await _pub.publish(self.gen_pub_event_topic(event=event, client_id=client_id),
                                       data=message._asdict())
 
-    async def ping(self, event):
+    async def ping(self, event, _pub=None):
         message = MessageFactory.load(MessageFactory.CATEGORY_CONTROL, ControlEvent(ControlEvent.EVENT_PING))
-        async with self._pubsub.get_pub() as _pub:
+        if not _pub:
+            async with self._pubsub.get_pub() as _pub:
+                return await _pub.publish(self.gen_pub_event_topic(event=event), data=message._asdict())
+        else:
             return await _pub.publish(self.gen_pub_event_topic(event=event), data=message._asdict())
 
     @staticmethod
@@ -66,14 +70,25 @@ class SseApp(object):
     async def _ping(self):
         while True:
             await asyncio.sleep(self.config.ping_interval)
-            for event in self._register.get_events():
-                await self.ping(event)
+            async with self._pubsub.get_pub() as _pub:
+                for event in self._register.get_events():
+                    await self.ping(event, _pub)
 
     async def send(self, data: str, event: str = None, client_id=None, event_id: str = None, retry: int = None):
         message = MessageFactory.load(MessageFactory.CATEGORY_DATA,
                                       DataEvent(data, event=event, event_id=event_id, retry=retry))
         async with self._pubsub.get_pub() as _pub:
             return await _pub.publish(self.gen_pub_event_topic(event, client_id), message._asdict())
+
+    async def wait_no_stream(self):
+        try:
+            async with async_timeout.timeout(5):
+                while True:
+                    if self._register.no_events():
+                        return
+                    await asyncio.sleep(0.1)
+        except asyncio.TimeoutError:
+            raise asyncio.TimeoutError(f"wait stream closed timeout: {self._register.get_events()}")
 
     def init_app(self, app: Sanic):
 
@@ -86,6 +101,11 @@ class SseApp(object):
             self._ping_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await self._ping_task
+
+            async with self._pubsub.get_pub() as _pub:
+                for event in self._register.get_events():
+                    await self.terminate(event, _pub)
+            await self.wait_no_stream()
             await self._pubsub.close()
 
         app.ctx.sse_send = self.send
@@ -116,8 +136,8 @@ class SseApp(object):
             LOG.info(f"pid:{os.getpid()}, events:{self._register.get_events()}")
             try:
                 async with self._pubsub.get_sub() as _sub:
-                    _conn = await self._pubsub.psubscribe(self.gen_sub_event_topic(event), _conn=_sub.conn)
-                    async for k in self._pubsub.listen(_conn=_conn):
+                    await _sub.psubscribe(self.gen_sub_event_topic(event))
+                    async for k in _sub.listen():
                         is_termination = await self.process_message(k, response, client_id, group)
                         if is_termination:
                             break

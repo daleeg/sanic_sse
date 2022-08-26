@@ -30,6 +30,9 @@ class EventRegister(object):
         event_info = self._storage[event]
         return not client_id or event_info.get(client_id) == group
 
+    def no_events(self):
+        return not self.get_events()
+
     def get_events(self):
         return self._storage.keys()
 
