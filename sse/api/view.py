@@ -24,9 +24,9 @@ class EventSendView(HTTPMethodView):
         event = request.args.get("event")
         if not event:
             return json({"code": 1, "msg": "no event"})
-        remote_id = get_group_id(request)
+        group_id = get_group_id(request)
         client_id = request.args.get("client_id")
-        if not sse.is_registered(event, remote_id, client_id):
+        if not sse.is_registered(event, client_id, group_id):
             return json({"code": 1, "msg": "not registered"})
         data = {
             "info": f"hello, {event}"
