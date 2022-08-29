@@ -34,13 +34,14 @@ class SseApp(object):
 
     @classmethod
     def gen_pub_event_topic(cls, event, client_id=None):
+        _pid = f"{os.getpid()}"
         if client_id:
-            return f"{event}:{client_id}"
-        return f"{event}:"
+            return f"{event}:{client_id}:{_pid}"
+        return f"{event}::{_pid}"
 
     @classmethod
     def parse_topic(cls, topic):
-        return topic.rsplit(":", maxsplit=1)
+        return topic.rsplit(":", maxsplit=2)
 
     @classmethod
     def gen_sub_event_topic(cls, event):
@@ -94,10 +95,12 @@ class SseApp(object):
 
         @app.listener("after_server_start")
         def _on_start(_, loop):
+            LOG.info(f"pid:{os.getpid()} start")
             self._ping_task = loop.create_task(self._ping())
 
         @app.listener("before_server_stop")
         async def _on_stop(_, __):
+            LOG.info(f"pid:{os.getpid()} stop")
             self._ping_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await self._ping_task
@@ -111,22 +114,26 @@ class SseApp(object):
         app.ctx.sse_send = self.send
         app.ctx.sse = self
 
-    async def process_message(self, message, response, group, client_id):
+    async def process_message(self, message, response, event, group, client_id):
         _type = message["type"]
         category, event_body = MessageFactory.dump(InnerMessage(**message["data"]))
+        _event, _client_id, _pid = self.parse_topic(message["channel"])
         if category == MessageFactory.CATEGORY_CONTROL:
             if self.is_termination(event_body):
                 return True
+            if _pid and _pid != f"{os.getpid()}":
+                return False
         else:
-            event, _client_id = self.parse_topic(message["channel"])
             if _client_id and _client_id != client_id:
                 return False
-            if not self.is_registered(event, _client_id, group):
+            if _event and _event != event:
                 return False
-            LOG.info(f"event:{event}, client_id:{client_id}")
+            if not self.is_registered(_event, _client_id, group):
+                return False
+        LOG.info(f"pid:{os.getpid()}, event:{_event}, client_id:{_client_id} group:{group}")
         resp = event_body.to_string
         await response.write(resp)
-        LOG.info(f"message: [{resp}]")
+        LOG.info(f"pid:{os.getpid()}, message: [{resp}]")
         return False
 
     def sse_stream(self, event, client_id, group):
@@ -138,7 +145,7 @@ class SseApp(object):
                 async with self._pubsub.get_sub() as _sub:
                     await _sub.psubscribe(self.gen_sub_event_topic(event))
                     async for k in _sub.listen():
-                        is_termination = await self.process_message(k, response, client_id, group)
+                        is_termination = await self.process_message(k, response, event, group, client_id)
                         if is_termination:
                             break
             finally:
