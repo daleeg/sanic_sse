@@ -40,7 +40,7 @@ class SseApp(object):
 
     @classmethod
     def parse_topic(cls, topic):
-        return topic.rsplit(":", maxsplit=2)
+        return topic.rsplit(":", maxsplit=1)
 
     @classmethod
     def gen_sub_event_topic(cls, event):
