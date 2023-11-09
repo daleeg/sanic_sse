@@ -1,8 +1,11 @@
-from collections import namedtuple
+from typing import NamedTuple, Any
 
 from sse.core.event import ControlEvent, DataEvent
 
-InnerMessage = namedtuple("Message", ["category", "data"]) # ._asdict()
+
+class InnerMessage(NamedTuple):
+    category: str
+    data: Any
 
 
 class MessageFactory(object):

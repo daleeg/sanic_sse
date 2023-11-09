@@ -1,2 +1,3 @@
 aiopubsub-py3
 sanic
+redis

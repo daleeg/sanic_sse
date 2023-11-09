@@ -1,3 +1,5 @@
+import asyncio
+
 from .storage import BaseStorageBackend
 
 
@@ -13,16 +15,19 @@ class EventRegister(object):
         event_info[client_id] = group
         self._storage.set(event, event_info)
 
-    def unregister(self, event, client_id):
+    def unregister(self, event, client_id=None):
         if event not in self._storage:
             return
-        event_info = self._storage[event]
-        info = event_info.pop(client_id, None)
+        event_info = self._storage[event] or {}
+        if client_id:
+            event_info.pop(client_id, None)
+        else:
+            event_info = None
         if event_info:
             self._storage.set(event, event_info)
         else:
             self._storage.pop(event)
-        return info
+        return event_info
 
     def is_registered(self, event, client_id, group):
         if event not in self._storage:
@@ -35,19 +40,3 @@ class EventRegister(object):
 
     def get_events(self):
         return self._storage.keys()
-
-    def get_clients(self):
-        clients = set()
-        for event in self.get_events():
-            event_info = self._storage[event]
-            for c in event_info.keys():
-                clients.add(c)
-        return list(clients)
-
-    def get_event_clients(self):
-        result = []
-        for event in self.get_events():
-            event_info = self._storage[event]
-            for c in event_info.keys():
-                result.append([event, c])
-        return result

@@ -82,7 +82,10 @@ class ControlEvent(SseEvent):
 
     @property
     def to_string(self):
-        return f": {self.options['event']}\n\n"
+        event = self.options['event']
+        if event == self.EVENT_PING:
+            return f": {event}\n\n"
+        return f"event: {event}\n\n"
 
 
 def test_event():

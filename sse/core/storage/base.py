@@ -1,10 +1,4 @@
-import multiprocessing
-
-
 class BaseStorageBackend(object):
-    def __init__(self, **kwargs):
-        self.__storage = dict()
-        raise NotImplementedError("__init__ method must be implemented")
 
     def set(self, k, v):
         raise NotImplementedError("set method must be implemented")
@@ -44,40 +38,3 @@ class BaseStorageBackend(object):
 
     def __delitem__(self, k):
         return self.pop(k)
-
-    # def __getattr__(self, attr):
-    #     if attr not in self.__dict__:
-    #         return getattr(self.__storage, attr)
-    #     return self.__dict__[attr]
-
-
-class ShareMemoryStory(BaseStorageBackend):
-    def __init__(self, **kwargs):
-        self.__manager = multiprocessing.Manager()
-        self.__storage = self.__manager.dict(**kwargs)
-
-    def set(self, k, v):
-        self.__storage[k] = v
-
-    def get(self, k):
-        return self.__storage[k]
-
-    def pop(self, k, default=None):
-        return self.__storage.pop(k, default)
-
-    def exists(self, k):
-        return k in self.__storage
-
-    def size(self):
-        return len(self.__storage)
-
-    def keys(self):
-        return self.__storage.keys()
-
-
-if __name__ == '__main__':
-    a = ShareMemoryStory(a=1, b=2)
-    b = ShareMemoryStory(a=3, b=4)
-    print(b.size())
-    for k in a:
-        print(k)

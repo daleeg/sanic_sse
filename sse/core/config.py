@@ -17,6 +17,6 @@ def merge_config(config):
     pubsub_options["password"] = pubsub_options.pop("redis_passwd", os.getenv("SSE_REDIS_PASSWD", ""))
 
     return Config(
-        ping_interval=config.get("ping_interval", int(os.getenv("SSE_PING_INTERVAL", 10))),
+        ping_interval=config.get("ping_interval", int(os.getenv("SSE_PING_INTERVAL", 30))),
         pubsub_options=pubsub_options
     )
